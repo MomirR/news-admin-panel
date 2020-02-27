@@ -1,0 +1,33 @@
+image: ubuntu
+stages: ["pull", "build", "deploy"]
+
+before_script:
+  - "which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )"
+  - mkdir -p ~/.ssh
+  - eval $(ssh-agent -s)
+  - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+  - ssh-keyscan news.thinksmart.rs >> ~/.ssh/known_hosts
+
+git_pull:
+  stage: pull
+  script:
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd /home/stefan/apps/news-adminpanel && git pull origin staging"
+  only:
+    - staging
+
+build_app:
+  stage: build
+  script:
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "cd /home/stefan/apps/news-adminpanel && npm run rebuild && npm run clean:prod && npm run build"
+  only:
+    - staging
+
+deploy_app:
+  stage: deploy
+  script:
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add - > /dev/null
+    - ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "pm2 reload all"
+  only:
+    - staging
